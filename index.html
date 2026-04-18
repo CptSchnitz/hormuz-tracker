@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Strait of Hormuz Status</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        h1 { 
+            margin-top: 30px; 
+            text-align: center;
+            font-size: 1.8em;
+            padding: 0 15px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 650px;
+            padding: 15px;
+            box-sizing: border-box;
+        }
+
+        /* Status & Diagnostic Box */
+        #dashboard {
+            background: white;
+            padding: 30px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            /* Fixed min-height to prevent layout shift */
+            min-height: 420px; 
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        /* Diagnostic Checklist */
+        #diagnostic-list {
+            list-style-type: none;
+            padding: 0;
+            margin: 0 0 20px 0;
+            text-align: left;
+            flex-grow: 1;
+        }
+
+        .check-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 16px;
+            font-size: 1.05em;
+            font-weight: 500;
+            color: #95a5a6; /* Clearer pending state */
+            transition: color 0.2s ease;
+        }
+
+        .check-item.active {
+            color: #2980b9;
+            font-weight: 600;
+        }
+
+        .check-item.completed {
+            color: #27ae60;
+        }
+
+        .status-icon {
+            width: 24px;
+            height: 24px;
+            margin-right: 15px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-shrink: 0; /* Prevents icon squishing on mobile */
+        }
+
+        /* Mini Spinner for checklist */
+        .mini-spinner {
+            width: 16px;
+            height: 16px;
+            border: 3px solid #ecf0f1;
+            border-top-color: #2980b9;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            display: none;
+        }
+
+        .check-mark {
+            display: none;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+
+        .active .mini-spinner { display: block; }
+        .completed .check-mark { display: block; }
+
+        @keyframes spin { 
+            to { transform: rotate(360deg); } 
+        }
+
+        /* Final Result */
+        #final-result {
+            text-align: center;
+            border-top: 1px solid #eee;
+            padding-top: 20px;
+            margin-bottom: 20px;
+            /* Fixed height to prevent shifting when text appears */
+            min-height: 80px; 
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        h2 { 
+            margin: 0; 
+            font-size: 1.4em;
+            color: #2c3e50;
+        }
+        
+        .open { color: #27ae60; font-weight: bold; font-size: 1.6em; letter-spacing: 1px;}
+        .closed { color: #e74c3c; font-weight: bold; font-size: 1.6em; letter-spacing: 1px;}
+        .pending { color: #95a5a6; font-weight: normal; font-size: 1.2em; }
+
+        button {
+            background-color: #34495e;
+            color: white;
+            border: none;
+            padding: 14px 24px;
+            font-size: 1.1em;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            display: block;
+            width: 100%;
+            max-width: 300px;
+            margin: 0 auto;
+        }
+
+        button:hover:not(:disabled) { background-color: #2c3e50; }
+        button:disabled { background-color: #bdc3c7; cursor: not-allowed; }
+
+        /* Map Container */
+        #map {
+            height: 450px;
+            width: 100%;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            z-index: 1; /* Keeps Leaflet controls under overlapping elements if any */
+        }
+
+        /* Mobile Adjustments */
+        @media (max-width: 600px) {
+            h1 { font-size: 1.5em; }
+            #dashboard { padding: 20px 15px; min-height: 400px; }
+            .check-item { font-size: 0.95em; margin-bottom: 14px; }
+            #map { height: 350px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Strait of Hormuz Tracker</h1>
+
+        <div id="dashboard">
+            <ul id="diagnostic-list">
+                <li class="check-item" id="check-ukmto">
+                    <div class="status-icon"><div class="mini-spinner"></div><span class="check-mark">✓</span></div>
+                    <span>Querying UKMTO incident reports...</span>
+                </li>
+                <li class="check-item" id="check-sat">
+                    <div class="status-icon"><div class="mini-spinner"></div><span class="check-mark">✓</span></div>
+                    <span>Analyzing high-resolution satellite imagery...</span>
+                </li>
+                <li class="check-item" id="check-osint">
+                    <div class="status-icon"><div class="mini-spinner"></div><span class="check-mark">✓</span></div>
+                    <span>Aggregating OSINT intelligence feeds...</span>
+                </li>
+                <li class="check-item" id="check-press">
+                    <div class="status-icon"><div class="mini-spinner"></div><span class="check-mark">✓</span></div>
+                    <span>Parsing regional press releases...</span>
+                </li>
+                <li class="check-item" id="check-ais">
+                    <div class="status-icon"><div class="mini-spinner"></div><span class="check-mark">✓</span></div>
+                    <span>Tracking AIS maritime traffic patterns...</span>
+                </li>
+            </ul>
+
+            <div id="final-result">
+                <h2>Current Status: <br><span id="status-text" class="pending">Awaiting Scan...</span></h2>
+            </div>
+            
+            <button id="recheck-btn">Initiate Scan</button>
+        </div>
+
+        <div id="map"></div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <script>
+        const checkSteps = ['check-ukmto', 'check-sat', 'check-osint', 'check-press', 'check-ais'];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initMap();
+            // Start the sequence automatically on first load
+            startDiagnosticSequence(); 
+            
+            document.getElementById('recheck-btn').addEventListener('click', startDiagnosticSequence);
+        });
+
+        // Helper function to create delays for the animation
+        const delay = ms => new Promise(res => setTimeout(res, ms));
+
+        async function startDiagnosticSequence() {
+            const btn = document.getElementById('recheck-btn');
+            const statusText = document.getElementById('status-text');
+
+            // Set UI to scanning state (button stays in flow, preventing layout shift)
+            btn.disabled = true;
+            btn.innerText = "Scanning in progress...";
+            
+            statusText.innerText = "Processing Data...";
+            statusText.className = "pending";
+
+            // Reset all check items to initial state
+            checkSteps.forEach(id => {
+                const el = document.getElementById(id);
+                el.className = 'check-item';
+            });
+
+            // Run through each check sequentially
+            for (let i = 0; i < checkSteps.length; i++) {
+                const currentEl = document.getElementById(checkSteps[i]);
+                
+                // Set to active (spinner)
+                currentEl.classList.add('active');
+                
+                // Simulate time taken to query/parse (randomized between 600ms and 1200ms)
+                const processingTime = Math.floor(Math.random() * 600) + 600;
+                await delay(processingTime);
+                
+                // Set to completed (checkmark)
+                currentEl.classList.remove('active');
+                currentEl.classList.add('completed');
+            }
+
+            // Small pause before revealing final status
+            await delay(400);
+            finalizeStatus();
+
+            // Restore button
+            btn.innerText = "Recheck Status";
+            btn.disabled = false;
+        }
+
+        function finalizeStatus() {
+            // Background Logic: Generate random base status
+            let isCurrentlyOpen = Math.random() >= 0.5;
+            let currentState = isCurrentlyOpen ? "OPEN" : "CLOSED";
+
+            // Background Logic: Fetch streak history
+            let lastState = localStorage.getItem('hormuz_lastState');
+            let streakCount = parseInt(localStorage.getItem('hormuz_streak') || 0);
+
+            // Background Logic: Enforce maximum streak of 5
+            if (lastState === currentState) {
+                if (streakCount >= 5) {
+                    currentState = currentState === "OPEN" ? "CLOSED" : "OPEN";
+                    streakCount = 1;
+                } else {
+                    streakCount++;
+                }
+            } else {
+                streakCount = 1;
+            }
+
+            // Save state silently
+            localStorage.setItem('hormuz_lastState', currentState);
+            localStorage.setItem('hormuz_streak', streakCount);
+
+            // Update UI
+            const statusText = document.getElementById('status-text');
+            statusText.innerText = currentState;
+            statusText.className = currentState.toLowerCase();
+        }
+
+        function initMap() {
+            const lat = 26.5667;
+            const lng = 56.2500;
+
+            // Initialize map and disable initial zoom on mobile to prevent accidental scrolling traps
+            const map = L.map('map', {
+                center: [lat, lng],
+                zoom: 6,
+                scrollWheelZoom: false 
+            });
+
+            // Re-enable scroll zoom when map is clicked/focused
+            map.once('focus', function() { map.scrollWheelZoom.enable(); });
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            }).addTo(map);
+
+            L.marker([lat, lng]).addTo(map)
+                .bindPopup('<b>Strait of Hormuz</b><br>Global Maritime Chokepoint.')
+                .openPopup();
+        }
+    </script>
+</body>
+</html>
